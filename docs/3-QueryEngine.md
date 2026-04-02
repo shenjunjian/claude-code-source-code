@@ -1,82 +1,3 @@
-我需要先查看 QueryEngine.ts 文件的内容，了解其实现细节，然后查看 main.ts 文件，分析如何初始化和调用 QueryEngine 类。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\QueryEngine.ts
-          
-现在我需要查看 main.ts 文件，分析如何初始化和调用 QueryEngine 类。
-        
-            
-toolName: view_files
-            
-status: failed
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.ts
-          
-main.ts 文件不存在，我需要查看 src 目录下的文件来找到主入口点。
-        
-            
-toolName: view_folder
-            
-status: success
-          
-c:\Users\shenj\Desktop\claude-code-source-code\src
-          
-我看到 src 目录下有 main.tsx 文件，这应该是主入口点。我需要查看这个文件来分析如何初始化和调用 QueryEngine 类。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
-main.tsx 文件内容被截断了，我需要继续查看更多内容来找到 QueryEngine 类的初始化和调用部分。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
-我需要继续查看 main.tsx 文件，寻找 QueryEngine 类的初始化和调用部分。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
-我需要继续查看 main.tsx 文件，寻找 QueryEngine 类的初始化和调用部分。从之前的代码中，我看到在非交互式模式下，程序会调用 runHeadless 函数，这个函数可能会初始化和使用 QueryEngine 类。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\cli\print.ts
-          
-我需要继续查看 print.ts 文件，找到 ask 函数的调用位置，因为这个函数是从 QueryEngine.ts 导入的，它会初始化和使用 QueryEngine 类。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\cli\print.ts
-          
 # QueryEngine 类的初始化和调用分析
 
 ## 核心调用流程
@@ -223,3 +144,147 @@ try {
 QueryEngine 类是 Claude Code 项目的核心组件，负责处理查询生命周期和会话状态。它通过 `ask` 函数进行初始化和调用，接收丰富的参数来配置其行为。在 `main.tsx` 中，程序会根据运行模式选择不同的执行路径，非交互式模式会通过 `runHeadless` 函数最终调用 `ask` 函数来使用 QueryEngine。
 
 这种设计使得 QueryEngine 能够灵活适应不同的使用场景，无论是交互式的 REPL 环境还是非交互式的命令行环境，都能提供一致的查询处理能力。
+
+
+
+# 交互模式流程与入口分析
+
+## 交互模式入口
+
+交互模式的入口位于 `main.tsx` 文件中，当没有非交互模式标志（如 `-p`, `--print`）时，应用会启动交互式会话：
+
+1. **main.tsx 中的入口点**：
+   - 当解析命令行参数后，发现没有非交互模式标志时，会调用 `launchRepl` 函数（第3733行和第3798行）
+   - `launchRepl` 函数接收应用状态、会话配置和渲染函数作为参数
+
+2. **replLauncher.tsx 中的启动逻辑**：
+   - `launchRepl` 函数动态导入 `App` 和 `REPL` 组件，避免循环依赖
+   - 将 `REPL` 组件渲染到 `App` 中，启动交互式界面
+
+## 交互模式流程
+
+交互模式的完整流程如下：
+
+### 1. 用户输入处理
+- 用户在 `REPL` 组件的输入框中输入查询
+- 输入通过 `PromptInput` 组件处理，支持命令历史、自动完成等功能
+- 按下 Enter 键后，`handlePromptSubmit` 函数被调用，处理输入并调用 `onQuery`
+
+### 2. 查询执行
+- `onQuery` 函数被调用，准备查询参数
+- `onQueryImpl` 函数执行实际的查询逻辑：
+  - 准备 IDE 集成
+  - 提取会话标题（如果是第一次用户消息）
+  - 应用工具权限规则
+  - 调用 `query` 函数执行核心查询循环
+
+### 3. 核心查询循环
+- `query` 函数（在 `query.ts` 中）执行以下操作：
+  - 处理消息规范化和上下文管理
+  - 调用 `queryModelWithStreaming` 与 Claude 模型交互
+  - 处理工具使用请求
+  - 执行工具并处理结果
+  - 处理模型响应和流式输出
+
+### 4. 响应处理
+- `onQueryEvent` 函数处理查询事件：
+  - 处理紧凑边界消息
+  - 处理工具进度消息
+  - 更新 UI 显示
+  - 管理流式输出状态
+
+### 5. 会话管理
+- 维护会话状态，包括消息历史、工具使用记录等
+- 处理会话恢复和保存
+- 管理权限和安全设置
+
+## 核心组件与函数
+
+### 主要组件
+1. **REPL.tsx**：核心交互组件，处理用户输入、消息显示和查询执行
+2. **query.ts**：执行核心查询循环，处理模型调用和工具使用
+3. **claude.ts**：与 Claude 模型的 API 交互，处理流式响应
+4. **Tool.ts**：工具定义和执行逻辑
+
+### 关键函数
+1. **launchRepl**：启动 REPL 组件
+2. **onQuery**：处理用户查询输入
+3. **onQueryImpl**：执行查询逻辑
+4. **query**：核心查询循环
+5. **queryModelWithStreaming**：与 Claude 模型的流式交互
+6. **runTools**：执行工具调用
+7. **handleMessageFromStream**：处理流式消息
+
+## 交互模式与非交互模式的区别
+
+| 特性 | 交互模式 | 非交互模式 |
+|------|---------|-----------|
+| 入口点 | `launchRepl` 函数 | 直接执行 `query` 函数 |
+| 用户界面 | 完整的终端 UI，支持实时交互 | 无 UI，直接输出结果 |
+| 输入方式 | 交互式命令行输入 | 命令行参数或标准输入 |
+| 输出方式 | 实时流式输出，支持彩色和格式化 | 标准输出，通常为 JSON 或纯文本 |
+| 会话管理 | 支持会话保存和恢复 | 单次执行，无会话管理 |
+| 工具使用 | 支持交互式工具权限确认 | 自动工具权限处理 |
+
+## 代码示例
+
+### 1. 交互模式入口（main.tsx）
+```typescript
+// 启动 REPL 组件
+await launchRepl(root, {
+  getFpsMetrics,
+  stats,
+  initialState: resumeData.initialState
+}, {
+  ...sessionConfig,
+  mainThreadAgentDefinition: resumeData.restoredAgentDef ?? mainThreadAgentDefinition,
+  initialMessages: resumeData.messages,
+  initialFileHistorySnapshots: resumeData.fileHistorySnapshots,
+  initialContentReplacements: resumeData.contentReplacements,
+  initialAgentName: resumeData.agentName,
+  initialAgentColor: resumeData.agentColor
+}, renderAndRun);
+```
+
+### 2. REPL 组件中的查询执行（REPL.tsx）
+```typescript
+// 执行查询
+for await (const event of query({
+  messages: messagesIncludingNewMessages,
+  systemPrompt,
+  userContext,
+  systemContext,
+  canUseTool,
+  toolUseContext,
+  querySource: getQuerySourceForREPL()
+})) {
+  onQueryEvent(event);
+}
+```
+
+### 3. 核心查询函数（query.ts）
+```typescript
+export async function* query(
+  params: QueryParams,
+): AsyncGenerator<
+  | StreamEvent
+  | RequestStartEvent
+  | Message
+  | TombstoneMessage
+  | ToolUseSummaryMessage,
+  Terminal
+> {
+  const consumedCommandUuids: string[] = [];
+  const terminal = yield* queryLoop(params, consumedCommandUuids);
+  for (const uuid of consumedCommandUuids) {
+    notifyCommandLifecycle(uuid, 'completed');
+  }
+  return terminal;
+}
+```
+
+## 总结
+
+交互模式是 Claude Code 的主要运行模式，提供了完整的终端用户界面，支持实时交互、流式输出、工具使用和会话管理。其流程从 `main.tsx` 中的 `launchRepl` 函数开始，通过 `REPL` 组件处理用户输入，然后调用 `query` 函数执行核心查询逻辑，最后通过流式输出将结果展示给用户。
+
+这种设计使得用户可以与 Claude 进行自然的对话式交互，同时利用工具执行各种任务，如文件操作、代码执行等，为开发者提供了一个强大的 AI 辅助编程环境。

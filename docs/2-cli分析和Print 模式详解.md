@@ -1,222 +1,193 @@
-让我搜索 Print 模式的相关代码来详细了解它的工作原理：
-        
-            
-toolName: search_by_regex
-            
-status: success
-          
-query: print.*mode|isPrintMode|--print|-p|Print response and exit
-          
-让我搜索更具体的 Print 模式实现：
-        
-            
-toolName: search_by_regex
-            
-status: success
-          
-query: isPrintMode|printMode|output-format.*stream-json|--print
-          
+## CLI 参数解析逻辑分析
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+### 1. 整体架构
 
-        
-            
-toolName: view_files
-            
-status: failed
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\cli\print.ts
-          
+Claude Code 的 CLI 参数解析采用了**分层解析策略**，结合了 **Commander.js** 框架和自定义的**预解析逻辑**。
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\cli\print.ts
-          
+### 2. 核心组件
 
-        
-            
-toolName: search_by_regex
-            
-status: success
-          
-query: isPrintMode|printMode|Print response and exit|useful for pipes
-          
+#### 2.1 预解析工具 (`src/utils/cliArgs.ts`)
 
-        
-            
-toolName: search_by_regex
-            
-status: success
-          
-query: print\s*===\s*true|if.*print.*\{|options\.print|printMode
-          
+```typescript
+// 两个核心函数：
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+// 1. eagerParseCliFlag - 在 Commander 之前提前解析特定标志
+export function eagerParseCliFlag(
+  flagName: string,
+  argv: string[] = process.argv,
+): string | undefined
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+// 2. extractArgsAfterDoubleDash - 处理 -- 分隔符约定
+export function extractArgsAfterDoubleDash(
+  commandOrValue: string,
+  args: string[] = [],
+): { command: string; args: string[] }
+```
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+#### 2.2 主解析流程 (`src/main.tsx`)
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+**第一阶段：早期标志检测（在 init() 之前）**
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+```typescript
+// 第 797-813 行：检测非交互模式标志
+const hasPrintFlag = cliArgs.includes('-p') || cliArgs.includes('--print');
+const hasInitOnlyFlag = cliArgs.includes('--init-only');
+const hasSdkUrl = cliArgs.some(arg => arg.startsWith('--sdk-url'));
+const isNonInteractive = hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !process.stdout.isTTY;
+```
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+**第二阶段：eagerLoadSettings()（第 852 行）**
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+```typescript
+function eagerLoadSettings(): void {
+  // 使用 eagerParseCliFlag 提前解析 --settings
+  const settingsFile = eagerParseCliFlag('--settings');
+  if (settingsFile) {
+    loadSettingsFromFlag(settingsFile);  // 支持 JSON 字符串或文件路径
+  }
+  
+  // 提前解析 --setting-sources 控制配置源
+  const settingSourcesArg = eagerParseCliFlag('--setting-sources');
+  if (settingSourcesArg !== undefined) {
+    loadSettingSourcesFromFlag(settingSourcesArg);
+  }
+}
+```
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+**第三阶段：Commander.js 主解析（第 902 行起）**
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+```typescript
+const program = new CommanderCommand()
+  .configureHelp(createSortedHelpConfig())
+  .enablePositionalOptions();
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+// 使用 preAction hook 在命令执行前初始化
+program.hook('preAction', async thisCommand => {
+  await init();  // 初始化在参数解析之后，命令执行之前
+  // ...
+});
+```
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+### 3. 参数分类
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+#### 3.1 全局选项（第 968-1006 行）
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+| 类别 | 选项示例 |
+|------|----------|
+| 调试 | `-d, --debug`, `--debug-file`, `--verbose` |
+| 模式 | `-p, --print`, `--bare`, `--init`, `--init-only` |
+| 输出格式 | `--output-format`, `--json-schema` |
+| 权限 | `--dangerously-skip-permissions`, `--permission-mode` |
+| 会话控制 | `-c, --continue`, `-r, --resume`, `--session-id` |
+| 模型 | `--model`, `--effort`, `--agent` |
+| 配置 | `--settings`, `--setting-sources`, `--plugin-dir` |
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
+#### 3.2 子命令结构
 
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: c:\Users\shenj\Desktop\claude-code-source-code\src\main.tsx
-          
-现在我已经获取了足够的信息。让我为您详细解释 Print 模式：
+```
+claude
+├── mcp (配置管理)
+│   ├── serve
+│   ├── add
+│   ├── remove
+│   └── ...
+├── auth (认证)
+│   ├── login
+│   └── status
+├── plugin (插件)
+│   ├── list
+│   ├── install
+│   └── ...
+├── config (配置)
+├── doctor (诊断)
+└── ...
+```
 
----
+### 4. 特殊处理逻辑
+
+#### 4.1 SSH 远程模式预解析（第 702-795 行）
+
+```typescript
+// 在 Commander 运行前提取 SSH 相关标志
+if (feature('SSH_REMOTE') && _pendingSSH) {
+  // 手动提取 --local, --dangerously-skip-permissions, --permission-mode 等
+  // 重写 process.argv 以隐藏 SSH 子命令，让主命令处理剩余参数
+}
+```
+
+#### 4.2 Print 模式优化（第 3875-3890 行）
+
+```typescript
+// -p/--print 模式下跳过子命令注册（节省 ~65ms）
+const isPrintMode = process.argv.includes('-p') || process.argv.includes('--print');
+if (isPrintMode && !isCcUrl) {
+  await program.parseAsync(process.argv);
+  return program;
+}
+```
+
+#### 4.3 特性标志控制的条件选项（第 3816-3872 行）
+
+```typescript
+if ("external" === 'ant') {
+  // ANT-ONLY 选项
+  program.addOption(new Option('--delegate-permissions', ...));
+}
+
+if (feature('KAIROS')) {
+  program.addOption(new Option('--assistant', ...));
+}
+```
+
+### 5. 参数处理流程图
+
+```
+process.argv
+    │
+    ▼
+┌─────────────────┐
+│  早期标志检测    │  ← 检测 -p/--print, --init-only 等
+│  (第 797-813 行) │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│ eagerLoadSettings│  ← 使用 eagerParseCliFlag 解析
+│  (第 852 行)     │     --settings, --setting-sources
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   SSH 预处理    │  ← 提取 SSH 相关标志，重写 argv
+│  (第 702-795 行) │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│ Commander.js    │  ← 主解析逻辑
+│  初始化和配置   │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│  preAction Hook │  ← 执行 init(), 加载配置
+│  (第 907-966 行) │
+└─────────────────┘
+    │
+    ▼
+┌─────────────────┐
+│   命令执行      │  ← 调用对应 action 处理函数
+│   (action)      │
+└─────────────────┘
+```
+
+### 6. 关键设计特点
+
+1. **分层解析**：先手动预解析关键标志，再使用 Commander 完整解析
+2. **性能优化**：Print 模式下跳过不必要的子命令注册
+3. **扩展性**：使用特性标志控制条件编译和功能开关
+4. **类型安全**：使用 `@commander-js/extra-typings` 提供 TypeScript 类型支持
+5. **延迟初始化**：通过 `preAction` hook 确保解析完成后再执行耗时初始化
 
 ## Print 模式详解
 
